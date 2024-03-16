@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<style>
+input { font-family: monospace; }
+.large { font-size: large; }
+.noborder { border: none; }
+.copied::after { margin-left:3px; content:"copied!"; font-style:italic; background-color:silver; padding:3px; border-radius:4px; }
+.hidden { display: none; }
+#notice { font-style: italic; }
+.error { color: red; }
+</style>
+</head>
+
+<body>
+<h2>GitHub Copilot token Generator</h2>
+<p id="message"><em>Loading...</em>
+<div id="info" class="hidden">
+<p>Waiting login: <code id="time"></code>
+<p id="notice">
+Your token remains secure within your browser.<br>
+You are welcome to press <kbd>Ctrl+U</kbd> to view the complete source code of the script.<br>
+Or visit the following URL: 
+</div>
+<script>
+const message = document.getElementById("message");
+const makeCopyable = (text, classes) => {
+    const el = document.createElement("input");
+    el.setAttribute("title", "Click to copy");
+    el.setAttribute("value", text);
+    el.setAttribute("size", text.length);
+    el.setAttribute("readonly", "");
+    el.setAttribute("class", classes);
+    el.addEventListener("click", async () => {
+        await navigator.clipboard.writeText(text);
+        const copied = document.createElement("span");
+        copied.classList.add("copied");
+        el.after(copied);
+        setTimeout(() => copied.remove(), 1000);
+    });
+    return el;
+};
+document.getElementById("notice")
+    .append(makeCopyable("view-source:" + window.location.href, "noborder"));
+
+const safeFetch = async (url, options) => {
+    let data;
+    try {
+        const response = await fetch("/corsproxy?" + url, options);
+        if (response.ok) {
+            data = await response.json();
+        } else {
+            console.error(await response.text());
+            data = { error: `${url}: ${response.status} ${response.statusText}` };
+        }
+    } catch (error) {
+        data = { error: `${url}: ${error}` };
+    }
+    return data;
+};
+
+document.addEventListener("DOMContentLoaded", async () => {
+    let url = "https://github.com/login/device/code";
+    const clientId = "Iv1.b507a08c87ecfe98"; // GitHub Copilot Plugin by GitHub
+    let body = JSON.stringify({
+        client_id: clientId,
+        scope: "read:user"
+    });
+    const headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+    };
+    let data = await safeFetch(url, { method: "POST", headers, body });
+    if (data.error) {
+        message.textContent = "Error: " + data.error;
+        message.classList.add("error");
+        return;
+    }
+    message.innerHTML = `Please open <a href="${data.verification_uri}" target="_blank">${data.verification_uri}</a> and enter `;
+    message.append(makeCopyable(data.user_code, "large"));
+    const info = document.getElementById("info");
+    info.classList.remove("hidden");
+
+    url = "https://github.com/login/oauth/access_token";
+    body = JSON.stringify({
+        client_id: clientId,
+        device_code: data.device_code,
+        grant_type: "urn:ietf:params:oauth:grant-type:device_code"
+    });
+    const time = document.getElementById("time");
+    const timeout = Date.now() + data.expires_in * 1000;
+    const countdown = setInterval(() => {
+        const left = timeout - Date.now();
+        const date = new Date(left > 0 ? left : 0);
+        time.textContent = date.toLocaleTimeString().substring(3);
+    }, 1000);
+    const interval = data.interval;
+    setTimeout(async function poll () {
+        data = await safeFetch(url, { method: "POST", headers, body });
+        if (data.error === "authorization_pending" || data.error === "slow_down") {
+            setTimeout(poll, (data.interval || interval) * 1000);
+            return;
+        }
+        if (data.access_token) {
+            message.textContent = "Your token is: ";
+            message.append(makeCopyable(data.access_token, "noborder large"));
+        } else {
+            console.error(data);
+            message.textContent = "Error: " + (data.error_description || data.error);
+            message.classList.add("error");
+        }
+        clearInterval(countdown);
+        info.classList.add("hidden");
+    }, interval * 1000);
+});
+</script>
+</body>
+</html>
