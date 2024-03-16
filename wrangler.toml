@@ -1,4 +1,7 @@
-name = "gemini"
+name = "copilot"
 main = "src/worker.mjs"
 compatibility_date = "2024-01-17"
-compatibility_flags = [ "nodejs_compat" ]
+
+[[kv_namespaces]]
+binding = "KV"
+id = "4e595a4637f048ed8c92bab1821c6e54"
